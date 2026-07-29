@@ -1,5 +1,5 @@
 import React from 'react';
-import { X, ShieldCheck, Music, Radio, Zap, Repeat } from 'lucide-react';
+import { X, ShieldCheck, Radio, Repeat } from 'lucide-react';
 import YoutubeIcon from './YoutubeIcon';
 
 export default function InfoModal({ isOpen, onClose }) {
@@ -51,7 +51,7 @@ export default function InfoModal({ isOpen, onClose }) {
               <Repeat size={18} color="var(--accent-cyan)" style={{ marginTop: '2px', flexShrink: 0 }} />
               <div>
                 <strong style={{ color: '#fff' }}>Practice Suite:</strong>
-                <p style={{ color: 'var(--text-muted)' }}>Speed control (0.25x - 1.50x), measure range looping, metronome click, count-in, pitch transposition, and live 22-fret neck visualizer.</p>
+                <p style={{ color: 'var(--text-muted)' }}>Speed control & Speed Trainer auto-increment, layout view toggles (Horizontal/Page), notation profile switches, measure looping, click & count-in, pitch transpose, print export, and interactive fretboard visualizer with live pitch note names.</p>
               </div>
             </div>
           </div>

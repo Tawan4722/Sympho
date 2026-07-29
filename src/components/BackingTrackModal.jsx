@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, Music, Sliders, Check, HelpCircle, Link as LinkIcon } from 'lucide-react';
+import { X, Sliders, Check, Link as LinkIcon } from 'lucide-react';
 import YoutubeIcon from './YoutubeIcon';
 
 export default function BackingTrackModal({

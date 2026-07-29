@@ -1,5 +1,5 @@
 import React, { useRef } from 'react';
-import { Music, Upload, Volume2, Sparkles, FolderOpen, Info } from 'lucide-react';
+import { Music, Upload, FolderOpen, Info, Printer, Keyboard } from 'lucide-react';
 import YoutubeIcon from './YoutubeIcon';
 import { DEMO_SONGS } from '../utils/demoSongs';
 
@@ -9,7 +9,9 @@ export default function Navbar({
   onFileUpload,
   onOpenBackingTrackModal,
   backingTrackInfo,
-  onOpenInfoModal
+  onOpenInfoModal,
+  onOpenHotkeysModal,
+  onPrintScore
 }) {
   const fileInputRef = useRef(null);
 
@@ -53,8 +55,8 @@ export default function Navbar({
         </div>
       </div>
 
-      {/* Song Picker & Demo Selector */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+      {/* Song Picker & Controls */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', background: 'rgba(0,0,0,0.3)', padding: '6px 12px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-color)' }}>
           <FolderOpen size={16} color="var(--primary)" />
           <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>Song:</span>
@@ -88,7 +90,7 @@ export default function Navbar({
           </select>
         </div>
 
-        {/* Upload Custom Tab File (.gp, .gpx, .gp5, .xml) */}
+        {/* Upload Custom Tab File */}
         <input 
           type="file" 
           ref={fileInputRef} 
@@ -117,6 +119,24 @@ export default function Navbar({
           <YoutubeIcon size={16} color={backingTrackInfo?.url ? '#fa5c2c' : '#fff'} />
           <span>{backingTrackInfo?.url ? 'Backing Track Synced' : 'Add Backing Track'}</span>
           {backingTrackInfo?.url && <span className="badge badge-cyan" style={{ fontSize: '0.65rem' }}>ACTIVE</span>}
+        </button>
+
+        {/* Print / Export Sheet Music */}
+        <button 
+          className="btn btn-secondary btn-icon"
+          onClick={onPrintScore}
+          title="Print or Export Sheet Music / Tab"
+        >
+          <Printer size={18} />
+        </button>
+
+        {/* Hotkeys Modal Trigger */}
+        <button 
+          className="btn btn-secondary btn-icon" 
+          onClick={onOpenHotkeysModal}
+          title="Musician Keyboard Shortcuts (?)"
+        >
+          <Keyboard size={18} />
         </button>
 
         {/* Info Modal Button */}

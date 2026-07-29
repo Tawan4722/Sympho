@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import Navbar from './components/Navbar';
 import ScoreViewer from './components/ScoreViewer';
 import TrackMixer from './components/TrackMixer';
@@ -7,6 +7,7 @@ import BackingTrackModal from './components/BackingTrackModal';
 import YoutubeSyncPlayer from './components/YoutubeSyncPlayer';
 import FretboardVisualizer from './components/FretboardVisualizer';
 import InfoModal from './components/InfoModal';
+import HotkeysModal from './components/HotkeysModal';
 
 import { DEMO_SONGS } from './utils/demoSongs';
 
@@ -18,6 +19,7 @@ export default function App() {
   // Tab Tracks State
   const [tracks, setTracks] = useState([]);
   const [selectedTrackIndex, setSelectedTrackIndex] = useState(0);
+  const [trackTuning, setTrackTuning] = useState([]);
 
   // Playback State
   const [isPlaying, setIsPlaying] = useState(false);
@@ -25,6 +27,12 @@ export default function App() {
   const [totalTime, setTotalTime] = useState(0);
   const [currentBar, setCurrentBar] = useState(1);
   const [totalBars, setTotalBars] = useState(1);
+
+  // Score View & Layout Options
+  const [layoutMode, setLayoutMode] = useState('Page'); // 'Page' or 'Horizontal'
+  const [staveProfile, setStaveProfile] = useState('Default'); // 'Default', 'Tab', 'Score'
+  const [zoomScale, setZoomScale] = useState(1.0);
+  const [masterVolume, setMasterVolume] = useState(1.0);
 
   // Practice Suite State
   const [playbackSpeed, setPlaybackSpeed] = useState(1.0);
@@ -34,6 +42,10 @@ export default function App() {
   const [isMetronomeOn, setIsMetronomeOn] = useState(false);
   const [isCountInOn, setIsCountInOn] = useState(false);
   const [transpose, setTranspose] = useState(0);
+
+  // Automated Speed Trainer Mode
+  const [isSpeedTrainerOn, setIsSpeedTrainerOn] = useState(false);
+  const [speedTrainerStep, setSpeedTrainerStep] = useState(0.05);
 
   // Backing Track & Sync State
   const [backingTrackInfo, setBackingTrackInfo] = useState({
@@ -47,21 +59,96 @@ export default function App() {
   const [activeNotes, setActiveNotes] = useState([]);
   const [isBackingTrackModalOpen, setIsBackingTrackModalOpen] = useState(false);
   const [isInfoModalOpen, setIsInfoModalOpen] = useState(false);
+  const [isHotkeysModalOpen, setIsHotkeysModalOpen] = useState(false);
 
   // AlphaTab API Ref
   const alphaTabApiRef = useRef(null);
+  const previousBarRef = useRef(1);
 
-  // Keyboard Shortcuts (Space for Play/Pause)
+  // Playback Operations
+  const handleTogglePlay = useCallback(() => {
+    const api = alphaTabApiRef.current;
+    if (!api) return;
+    api.playPause();
+  }, []);
+
+  const handleStop = useCallback(() => {
+    const api = alphaTabApiRef.current;
+    if (!api) return;
+    api.stop();
+  }, []);
+
+  const handleChangeSpeed = useCallback((speed) => {
+    setPlaybackSpeed(speed);
+    const api = alphaTabApiRef.current;
+    if (api) {
+      api.playbackSpeed = speed;
+    }
+  }, []);
+
+  const handleToggleLoop = useCallback(() => {
+    setIsLooping(prev => {
+      const nextLoop = !prev;
+      const api = alphaTabApiRef.current;
+      if (api) {
+        api.isLooping = nextLoop;
+        if (nextLoop) {
+          api.setLoopRangeByBar(loopStartBar - 1, loopEndBar - 1);
+        }
+      }
+      return nextLoop;
+    });
+  }, [loopStartBar, loopEndBar]);
+
+  // Global Musician Keyboard Shortcuts Listener
   useEffect(() => {
     const handleKeyDown = (e) => {
-      if (e.code === 'Space' && e.target.tagName !== 'INPUT' && e.target.tagName !== 'SELECT') {
+      if (['INPUT', 'SELECT', 'TEXTAREA'].includes(e.target.tagName)) return;
+
+      if (e.code === 'Space') {
         e.preventDefault();
         handleTogglePlay();
+      } else if (e.code === 'Escape') {
+        e.preventDefault();
+        handleStop();
+      } else if (e.key === '[' || e.key === '{') {
+        e.preventDefault();
+        handleChangeSpeed(Math.max(0.25, parseFloat((playbackSpeed - 0.1).toFixed(2))));
+      } else if (e.key === ']' || e.key === '}') {
+        e.preventDefault();
+        handleChangeSpeed(Math.min(1.5, parseFloat((playbackSpeed + 0.1).toFixed(2))));
+      } else if (e.key.toLowerCase() === 'l') {
+        e.preventDefault();
+        handleToggleLoop();
+      } else if (e.key.toLowerCase() === 'f') {
+        e.preventDefault();
+        setIsFretboardOpen(prev => !prev);
+      } else if (e.key === '?' || (e.shiftKey && e.key === '/')) {
+        e.preventDefault();
+        setIsHotkeysModalOpen(prev => !prev);
+      } else if (e.key.toLowerCase() === 'm') {
+        e.preventDefault();
+        if (selectedTrackIndex !== undefined) handleToggleMute(selectedTrackIndex);
+      } else if (e.key.toLowerCase() === 's') {
+        e.preventDefault();
+        if (selectedTrackIndex !== undefined) handleToggleSolo(selectedTrackIndex);
       }
     };
+
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isPlaying]);
+  }, [handleTogglePlay, handleStop, handleChangeSpeed, handleToggleLoop, playbackSpeed, selectedTrackIndex]);
+
+  // Handle Speed Trainer Increment on Loop Wrap
+  useEffect(() => {
+    if (isSpeedTrainerOn && isPlaying && isLooping) {
+      if (previousBarRef.current > currentBar && currentBar === loopStartBar) {
+        // Loop restarted, increment speed!
+        handleChangeSpeed(Math.min(1.5, parseFloat((playbackSpeed + speedTrainerStep).toFixed(2))));
+      }
+    }
+    previousBarRef.current = currentBar;
+  }, [currentBar, isSpeedTrainerOn, isPlaying, isLooping, loopStartBar, playbackSpeed, speedTrainerStep, handleChangeSpeed]);
 
   // Handle Demo Song Switch
   const handleSelectDemoSong = (song) => {
@@ -76,7 +163,7 @@ export default function App() {
     }
   };
 
-  // Handle Local GP/MusicXML File Upload (Client-side FileReader, NO server storage!)
+  // Handle Local GP/MusicXML File Upload
   const handleFileUpload = (file) => {
     const reader = new FileReader();
     reader.onload = (e) => {
@@ -103,11 +190,11 @@ export default function App() {
     setLoopEndBar(Math.min(8, barCount || 8));
   };
 
-  // Track Mixer Controls
+  // Dynamic Track Selection & Tuning
   const handleSelectTrack = (trackIndex) => {
     setSelectedTrackIndex(trackIndex);
     if (isBackingTrackMode) {
-      applyBackingTrackMute(trackIndex, tracks);
+      applyBackingTrackMute(trackIndex);
     }
   };
 
@@ -150,8 +237,8 @@ export default function App() {
     ));
   };
 
-  // Backing Track Isolate Mode (Mutes target track so user plays live)
-  const applyBackingTrackMute = (targetIdx, tracksList) => {
+  // Backing Track Isolate Mode
+  const applyBackingTrackMute = (targetIdx) => {
     const api = alphaTabApiRef.current;
     if (!api || !api.score) return;
 
@@ -172,9 +259,8 @@ export default function App() {
     setIsBackingTrackMode(nextMode);
 
     if (nextMode) {
-      applyBackingTrackMute(selectedTrackIndex, tracks);
+      applyBackingTrackMute(selectedTrackIndex);
     } else {
-      // Restore unmute
       const api = alphaTabApiRef.current;
       if (api && api.score) {
         api.score.tracks.forEach(track => {
@@ -183,39 +269,6 @@ export default function App() {
         });
       }
       setTracks(prev => prev.map(t => ({ ...t, isMuted: false })));
-    }
-  };
-
-  // Playback Operations
-  const handleTogglePlay = () => {
-    const api = alphaTabApiRef.current;
-    if (!api) return;
-    api.playPause();
-  };
-
-  const handleStop = () => {
-    const api = alphaTabApiRef.current;
-    if (!api) return;
-    api.stop();
-  };
-
-  const handleChangeSpeed = (speed) => {
-    setPlaybackSpeed(speed);
-    const api = alphaTabApiRef.current;
-    if (api) {
-      api.playbackSpeed = speed;
-    }
-  };
-
-  const handleToggleLoop = () => {
-    const nextLoop = !isLooping;
-    setIsLooping(nextLoop);
-    const api = alphaTabApiRef.current;
-    if (api) {
-      api.isLooping = nextLoop;
-      if (nextLoop) {
-        api.setLoopRangeByBar(loopStartBar - 1, loopEndBar - 1);
-      }
     }
   };
 
@@ -254,6 +307,15 @@ export default function App() {
     }
   };
 
+  const handlePrintScore = () => {
+    const api = alphaTabApiRef.current;
+    if (api) {
+      api.print();
+    } else {
+      window.print();
+    }
+  };
+
   return (
     <div className="app-container">
       {/* Top Navbar */}
@@ -264,6 +326,8 @@ export default function App() {
         onOpenBackingTrackModal={() => setIsBackingTrackModalOpen(true)}
         backingTrackInfo={backingTrackInfo}
         onOpenInfoModal={() => setIsInfoModalOpen(true)}
+        onOpenHotkeysModal={() => setIsHotkeysModalOpen(true)}
+        onPrintScore={handlePrintScore}
       />
 
       {/* Main Workspace (Mixer + Score Viewer) */}
@@ -283,6 +347,10 @@ export default function App() {
           songData={currentSong}
           customFileBuffer={customFileBuffer}
           selectedTrackIndex={selectedTrackIndex}
+          layoutMode={layoutMode}
+          staveProfile={staveProfile}
+          zoomScale={zoomScale}
+          masterVolume={masterVolume}
           onTracksLoaded={handleTracksLoaded}
           onPlaybackStateChange={setIsPlaying}
           onTimeUpdate={({ currentTime, totalTime, currentBar }) => {
@@ -291,6 +359,7 @@ export default function App() {
             setCurrentBar(currentBar);
           }}
           onActiveNotesUpdate={setActiveNotes}
+          onTuningUpdate={setTrackTuning}
           apiRef={alphaTabApiRef}
         />
       </div>
@@ -300,6 +369,7 @@ export default function App() {
         isOpen={isFretboardOpen}
         onClose={() => setIsFretboardOpen(false)}
         activeNotes={activeNotes}
+        trackTuning={trackTuning}
       />
 
       {/* Floating Bottom Practice Toolbar */}
@@ -314,6 +384,10 @@ export default function App() {
         loopStartBar={loopStartBar}
         loopEndBar={loopEndBar}
         onSetLoopRange={handleSetLoopRange}
+        isSpeedTrainerOn={isSpeedTrainerOn}
+        onToggleSpeedTrainer={() => setIsSpeedTrainerOn(!isSpeedTrainerOn)}
+        speedTrainerStep={speedTrainerStep}
+        onChangeSpeedTrainerStep={setSpeedTrainerStep}
         isMetronomeOn={isMetronomeOn}
         onToggleMetronome={handleToggleMetronome}
         isCountInOn={isCountInOn}
@@ -324,8 +398,17 @@ export default function App() {
         totalBars={totalBars}
         currentTime={currentTime}
         totalTime={totalTime}
+        layoutMode={layoutMode}
+        onChangeLayoutMode={setLayoutMode}
+        staveProfile={staveProfile}
+        onChangeStaveProfile={setStaveProfile}
+        zoomScale={zoomScale}
+        onChangeZoomScale={setZoomScale}
+        masterVolume={masterVolume}
+        onChangeMasterVolume={setMasterVolume}
         isFretboardOpen={isFretboardOpen}
         onToggleFretboard={() => setIsFretboardOpen(!isFretboardOpen)}
+        onOpenHotkeysModal={() => setIsHotkeysModalOpen(true)}
       />
 
       {/* YouTube Backing Track Player Widget */}
@@ -348,6 +431,11 @@ export default function App() {
       <InfoModal 
         isOpen={isInfoModalOpen}
         onClose={() => setIsInfoModalOpen(false)}
+      />
+
+      <HotkeysModal 
+        isOpen={isHotkeysModalOpen}
+        onClose={() => setIsHotkeysModalOpen(false)}
       />
     </div>
   );

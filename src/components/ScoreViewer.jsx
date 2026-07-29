@@ -5,18 +5,49 @@ export default function ScoreViewer({
   songData,
   customFileBuffer,
   selectedTrackIndex,
+  layoutMode = 'Page', // 'Page' or 'Horizontal'
+  staveProfile = 'Default', // 'Default', 'Tab', 'Score'
+  zoomScale = 1.0,
+  masterVolume = 1.0,
   onTracksLoaded,
   onPlaybackStateChange,
   onTimeUpdate,
   onActiveNotesUpdate,
+  onTuningUpdate,
   apiRef
 }) {
   const containerRef = useRef(null);
   const [isLoading, setIsLoading] = useState(true);
   const [loadingText, setLoadingText] = useState('Initializing SoundFont & Tab Engine...');
 
+  const settingsPropsRef = useRef({ layoutMode, staveProfile, zoomScale });
+  useEffect(() => {
+    settingsPropsRef.current = { layoutMode, staveProfile, zoomScale };
+  });
+
+  // Store callback refs to avoid re-triggering main useEffect
+  const callbacksRef = useRef({
+    onTracksLoaded,
+    onPlaybackStateChange,
+    onTimeUpdate,
+    onActiveNotesUpdate,
+    onTuningUpdate
+  });
+
+  useEffect(() => {
+    callbacksRef.current = {
+      onTracksLoaded,
+      onPlaybackStateChange,
+      onTimeUpdate,
+      onActiveNotesUpdate,
+      onTuningUpdate
+    };
+  });
+
   useEffect(() => {
     if (!containerRef.current) return;
+
+    const initialSettings = settingsPropsRef.current;
 
     // Initialize AlphaTab Engine
     const settings = {
@@ -30,15 +61,16 @@ export default function ScoreViewer({
         enableSoundFont: true
       },
       display: {
-        staveProfile: 'Default',
-        scale: 1.0
+        staveProfile: initialSettings.staveProfile,
+        layoutMode: initialSettings.layoutMode === 'Horizontal' ? 'Horizontal' : 'Page',
+        scale: initialSettings.zoomScale
       }
     };
 
     const api = new alphaTab.AlphaTabApi(containerRef.current, settings);
     if (apiRef) apiRef.current = api;
 
-    // Register Event Handlers with optional chaining to prevent undefined property errors
+    // Register Event Handlers
     api.error?.on((err) => {
       console.warn("AlphaTab engine error:", err);
       setIsLoading(false);
@@ -62,15 +94,22 @@ export default function ScoreViewer({
           name: t.name || `Track ${idx + 1}`,
           volume: t.playbackInfo?.volume ? t.playbackInfo.volume / 16 : 0.8,
           isMuted: t.playbackInfo?.isMute || false,
-          isSolo: t.playbackInfo?.isSolo || false
+          isSolo: t.playbackInfo?.isSolo || false,
+          tuning: t.staves?.[0]?.tuning || t.tuning || []
         }));
-        onTracksLoaded(tracksInfo, score.masterBars ? score.masterBars.length : 1);
+
+        callbacksRef.current.onTracksLoaded?.(tracksInfo, score.masterBars ? score.masterBars.length : 1);
+        
+        if (score.tracks[0]) {
+          const trackTuning = score.tracks[0].staves?.[0]?.tuning || score.tracks[0].tuning || [];
+          callbacksRef.current.onTuningUpdate?.(trackTuning);
+        }
       }
     });
 
     api.playerStateChanged?.on((args) => {
       if (args) {
-        onPlaybackStateChange(args.state === 1);
+        callbacksRef.current.onPlaybackStateChange?.(args.state === 1);
       }
     });
 
@@ -78,7 +117,7 @@ export default function ScoreViewer({
       if (args) {
         const timeSec = (args.currentTime || 0) / 1000;
         const totalSec = (args.endTime || 0) / 1000;
-        onTimeUpdate({
+        callbacksRef.current.onTimeUpdate?.({
           currentTime: timeSec,
           totalTime: totalSec,
           currentBar: args.currentBar ? args.currentBar.index + 1 : 1
@@ -104,7 +143,7 @@ export default function ScoreViewer({
             });
           }
         });
-        onActiveNotesUpdate(notes);
+        callbacksRef.current.onActiveNotesUpdate?.(notes);
       }
     });
 
@@ -116,7 +155,7 @@ export default function ScoreViewer({
         console.warn("AlphaTab destroy cleanup:", e);
       }
     };
-  }, []);
+  }, [apiRef]);
 
   // Load Score when songData or customFileBuffer changes
   useEffect(() => {
@@ -127,7 +166,6 @@ export default function ScoreViewer({
     setLoadingText('Rendering Musical Tab Notation...');
 
     if (customFileBuffer) {
-      // Load binary GuitarPro or MusicXML file
       try {
         api.load(customFileBuffer);
       } catch (err) {
@@ -135,7 +173,6 @@ export default function ScoreViewer({
         setIsLoading(false);
       }
     } else if (songData?.alphaTex) {
-      // Load AlphaTex string template
       try {
         api.tex(songData.alphaTex);
       } catch (err) {
@@ -143,17 +180,37 @@ export default function ScoreViewer({
         setIsLoading(false);
       }
     }
-  }, [songData, customFileBuffer]);
+  }, [songData, customFileBuffer, apiRef]);
 
   // Update render track when user selects a different track
   useEffect(() => {
     const api = apiRef?.current;
     if (!api || !api.score || selectedTrackIndex === undefined) return;
     
-    if (api.score.tracks[selectedTrackIndex]) {
-      api.renderTracks([api.score.tracks[selectedTrackIndex]]);
+    const track = api.score.tracks[selectedTrackIndex];
+    if (track) {
+      api.renderTracks([track]);
+      const trackTuning = track.staves?.[0]?.tuning || track.tuning || [];
+      callbacksRef.current.onTuningUpdate?.(trackTuning);
     }
-  }, [selectedTrackIndex]);
+  }, [selectedTrackIndex, apiRef]);
+
+  // Dynamically update layoutMode, staveProfile, zoomScale, masterVolume
+  useEffect(() => {
+    const api = apiRef?.current;
+    if (!api) return;
+
+    try {
+      api.settings.display.layoutMode = layoutMode === 'Horizontal' ? 'Horizontal' : 'Page';
+      api.settings.display.staveProfile = staveProfile;
+      api.settings.display.scale = zoomScale;
+      api.masterVolume = masterVolume;
+      api.updateSettings();
+      api.render();
+    } catch (e) {
+      console.warn("Dynamic settings update notice:", e);
+    }
+  }, [layoutMode, staveProfile, zoomScale, masterVolume, apiRef]);
 
   return (
     <main style={{

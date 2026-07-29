@@ -1,5 +1,5 @@
 import React from 'react';
-import { Volume2, VolumeX, Eye, Radio, Guitar, Disc, Music, Layers } from 'lucide-react';
+import { Volume2, Radio, Guitar, Disc, Music, Layers } from 'lucide-react';
 
 export default function TrackMixer({
   tracks = [],
@@ -95,7 +95,7 @@ export default function TrackMixer({
                   transition: 'all 0.15s ease'
                 }}
               >
-                {/* Track Title Header & Eye Selector */}
+                {/* Track Title Header & Selector */}
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                   <div 
                     onClick={() => onSelectTrack(idx)} 

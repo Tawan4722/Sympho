@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Volume2, Maximize2, Minimize2 } from 'lucide-react';
+import { Maximize2, Minimize2 } from 'lucide-react';
 import YoutubeIcon from './YoutubeIcon';
 
 export default function YoutubeSyncPlayer({
@@ -14,6 +14,11 @@ export default function YoutubeSyncPlayer({
   const [isMinimized, setIsMinimized] = useState(false);
   const playerRef = useRef(null);
   const audioRef = useRef(null);
+  const onSyncReadyRef = useRef(onSyncReady);
+
+  useEffect(() => {
+    onSyncReadyRef.current = onSyncReady;
+  }, [onSyncReady]);
 
   // Extract YouTube ID from URL
   useEffect(() => {
@@ -56,7 +61,7 @@ export default function YoutubeSyncPlayer({
     const initPlayer = () => {
       if (window.YT && window.YT.Player) {
         if (playerRef.current) {
-          try { playerRef.current.destroy(); } catch (e) {}
+          try { playerRef.current.destroy(); } catch (err) { console.warn("Player destroy error:", err); }
         }
         playerRef.current = new window.YT.Player(`yt-player-${youtubeId}`, {
           videoId: youtubeId,
@@ -68,7 +73,7 @@ export default function YoutubeSyncPlayer({
           },
           events: {
             onReady: () => {
-              if (onSyncReady) onSyncReady();
+              if (onSyncReadyRef.current) onSyncReadyRef.current();
             }
           }
         });
